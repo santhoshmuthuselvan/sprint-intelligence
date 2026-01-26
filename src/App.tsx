@@ -9,6 +9,7 @@ import { InviteUser } from './components/InviteUser';
 import { MemberDashboard } from './components/MemberDashboard';
 import { ForgotPassword } from './components/ForgotPassword';
 import { ResetPassword } from './components/ResetPassword';
+import { Profile } from './components/Profile';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -47,6 +48,13 @@ const AppContent = () => {
           <Route path="/leaderboard" element={
             <ProtectedRoute allowedRoles={['Owner', 'manager', 'member']}>
               <Leaderboard />
+            </ProtectedRoute>
+          } />
+
+
+          <Route path="/profile" element={
+            <ProtectedRoute allowedRoles={['Owner', 'manager', 'member']}>
+              <Profile />
             </ProtectedRoute>
           } />
 

@@ -9,6 +9,7 @@ interface Profile {
     email: string;
     role: UserRole;
     full_name: string;
+    avatar_url?: string;
 }
 
 interface AuthContextType {
@@ -17,6 +18,7 @@ interface AuthContextType {
     loading: boolean;
     signIn: () => Promise<void>;
     signOut: () => Promise<void>;
+    refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -104,6 +106,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    const refreshProfile = async () => {
+        if (user) {
+            await fetchProfile(user.id);
+        }
+    };
+
     const signIn = async () => {
         // We'll use OAuth or Email depending on Supabase setup. 
         // For now, providing a generic redirect-based sign-in trigger.
@@ -117,7 +125,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     return (
-        <AuthContext.Provider value={{ user, profile, loading, signIn, signOut }}>
+        <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, refreshProfile }}>
             {children}
         </AuthContext.Provider>
     );

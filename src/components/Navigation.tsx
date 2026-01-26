@@ -84,12 +84,19 @@ export const Navigation: React.FC = () => {
                         </span>
                     </button>
 
-                    <div className="w-10 h-10 rounded-full bg-linear-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-700 flex items-center justify-center text-xs font-bold shadow-sm ring-1 ring-black/5 dark:ring-white/10 overflow-hidden group relative cursor-help">
-                        {profile?.full_name ? profile.full_name.substring(0, 2).toUpperCase() : <UserIcon className="w-5 h-5 opacity-40" />}
+                    <button
+                        onClick={() => navigate('/profile')}
+                        className="w-10 h-10 rounded-full bg-linear-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-700 flex items-center justify-center text-xs font-bold shadow-sm ring-1 ring-black/5 dark:ring-white/10 overflow-hidden group relative cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all"
+                    >
+                        {profile?.avatar_url ? (
+                            <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                        ) : (
+                            profile?.full_name ? profile.full_name.substring(0, 2).toUpperCase() : <UserIcon className="w-5 h-5 opacity-40" />
+                        )}
                         <span className="absolute left-16 px-3 py-1.5 bg-zinc-900 text-white text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 translate-x-3 group-hover:translate-x-0 transition-all pointer-events-none whitespace-nowrap shadow-xl">
-                            {profile?.role || 'Guest'}
+                            View Profile
                         </span>
-                    </div>
+                    </button>
                 </div>
             </nav>
 

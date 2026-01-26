@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { LogIn, Mail, Lock, Loader2, Sparkles, Shield } from 'lucide-react';
+import { LogIn, Mail, Lock, Loader2, Sparkles, Shield, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../supabase';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 
 export const Login: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const navigate = useNavigate();
@@ -66,7 +67,7 @@ export const Login: React.FC = () => {
                             <Shield className="w-8 h-8 text-white" />
                         </div>
                         <h1 className="text-3xl font-black text-zinc-900 dark:text-white flex items-center gap-2">
-                            Sprint <span className="text-transparent bg-clip-text bg-linear-to-r from-blue-600 to-indigo-600">Report</span>
+                            Sprint <span className="text-transparent bg-clip-text bg-linear-to-r from-blue-600 to-indigo-600">Intelligence</span>
                         </h1>
                         <p className="text-zinc-500 dark:text-zinc-400 mt-2 font-medium">Secure access to your team's velocity</p>
                     </div>
@@ -92,13 +93,20 @@ export const Login: React.FC = () => {
                             <div className="relative group">
                                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400 group-focus-within:text-blue-500 transition-colors" />
                                 <input
-                                    type="password"
+                                    type={showPassword ? "text" : "password"}
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full bg-zinc-100 dark:bg-zinc-800/50 border border-transparent focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/10 py-3.5 pl-12 pr-4 rounded-2xl outline-none transition-all dark:text-white"
+                                    className="w-full bg-zinc-100 dark:bg-zinc-800/50 border border-transparent focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/10 py-3.5 pl-12 pr-12 rounded-2xl outline-none transition-all dark:text-white"
                                     placeholder="••••••••"
                                     required
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 focus:outline-none"
+                                >
+                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                </button>
                             </div>
                             <div className="flex justify-end pr-2">
                                 <Link to="/forgot-password" className="text-xs font-bold text-blue-600 hover:text-indigo-600 transition-colors">
