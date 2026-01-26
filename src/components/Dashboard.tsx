@@ -8,6 +8,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { FilterBar } from './FilterBar';
 import { DataTable } from './DataTable';
+import { supabase } from '../supabase';
 
 interface RawItem {
     id: string;
@@ -28,10 +29,10 @@ interface RawItem {
 }
 
 interface DashboardData {
-    trends: any[];
-    userStats: any[];
-    distribution: any;
     rawItems: RawItem[];
+    // Other properties (trends, etc.) are calculated on frontend now,
+    // so we can relax this interface or keep it for compatibility if we used the backend response structure.
+    // For now we just need rawItems.
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
@@ -76,9 +77,32 @@ export const Dashboard: React.FC = () => {
 
     const fetchData = async () => {
         try {
-            const res = await fetch('/api/dashboard-data');
-            const dashboardData = await res.json();
-            setData(dashboardData);
+            const { data: items, error } = await supabase
+                .from('sprint_items')
+                .select('*');
+
+            if (error) throw error;
+
+            // Map DB columns (snake_case) to Frontend (camelCase)
+            const rawItems: RawItem[] = (items || []).map((row: any) => ({
+                id: row.item_id,
+                name: row.item_name,
+                description: row.description,
+                team: row.team_name,
+                week: row.week_name,
+                sprint: row.sprint,
+                assignee: row.assignee,
+                status: row.status,
+                type: row.item_type,
+                priority: row.priority,
+                points: Number(row.estimation_points) || 0,
+                epic: row.epic,
+                tags: row.tags,
+                createdOn: row.created_on,
+                completedOn: row.completed_on
+            }));
+
+            setData({ rawItems });
             setLoading(false);
         } catch (error) {
             console.error('Failed to fetch dashboard data', error);

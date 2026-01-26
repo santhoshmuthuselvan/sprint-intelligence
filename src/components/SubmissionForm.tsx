@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertCircle, ChevronDown, Check, Plus } from 'lucide-react';
+import * as xlsx from 'xlsx';
+import { supabase } from '../supabase';
 
 const INITIAL_TEAMS = ['AI Team'];
 
@@ -53,6 +55,53 @@ export const SubmissionForm: React.FC = () => {
 
     const showCreateOption = team && !availableTeams.some(t => t.toLowerCase() === team.toLowerCase());
 
+    const parseDate = (value: any) => {
+        if (!value) return null;
+        const date = new Date(value);
+        return isNaN(date.getTime()) ? null : date.toISOString();
+    };
+
+    const mapRowToDb = (row: any, teamName: string, weekName: string) => {
+        return {
+            item_id: String(row['Item Id'] || ''),
+            item_name: row['Item Name'],
+            description: row['Description'],
+            user_groups: row['User Groups'],
+            created_on: parseDate(row['Created On']),
+            created_by: row['Created by'],
+            sprint: row['Sprint'],
+            completed_on: parseDate(row['Completed On']),
+            tags: row['Tags'],
+            assignee: row['Assignee'],
+            status: row['Status'],
+            epic: row['Epic'],
+            item_type: row['Item Type'],
+            priority: row['Priority'],
+            start_date: parseDate(row['Start Date']),
+            end_date: parseDate(row['End Date']),
+            start_after: parseDate(row['Start After']),
+            duration: row['Duration'],
+            estimation_points: parseFloat(row['Estimation Points']) || 0,
+            release_name: row['Release'],
+            total_workhours: parseFloat(row['Total Workhours']) || 0,
+            work_hours_per_owner: row['Work hours per owner'],
+            work_hours_type: row['Work hours type'],
+            parent_id: String(row['Parent Id'] || ''),
+            sprint_type: row['Sprint Type'],
+            sprint_start_date: parseDate(row['Sprint Start Date']),
+            sprint_end_date: parseDate(row['Sprint End Date']),
+            comments: row['Comments'],
+            created_time: parseDate(row['Created Time']),
+            last_modified: parseDate(row['Last Modified']),
+            blocked_by: row['Blocked by'],
+            blocked_on: parseDate(row['Blocked On']),
+
+            // Metadata
+            team_name: teamName,
+            week_name: weekName
+        };
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!team || !week || !file) {
@@ -62,27 +111,38 @@ export const SubmissionForm: React.FC = () => {
         }
 
         setStatus('uploading');
-        const formData = new FormData();
-        formData.append('team', team);
-        formData.append('week', week);
-        formData.append('file', file);
 
         try {
-            // Simulate API call for now since backend might not be ready for this exact endpoint
-            // const res = await fetch('/api/report', { ... });
+            // Read file
+            const data = await file.arrayBuffer();
+            const workbook = xlsx.read(data);
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            const jsonData = xlsx.utils.sheet_to_json<any>(sheet, { defval: '' });
 
-            // Mock success for UI verification
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            const recordsToInsert = jsonData
+                .filter(row => row['Item Id']) // Ensure at least Item Id exists
+                .map(row => mapRowToDb(row, team, week));
+
+            if (recordsToInsert.length === 0) {
+                throw new Error('No valid records found in file');
+            }
+
+            // Insert into Supabase
+            const { error } = await supabase
+                .from('sprint_items')
+                .insert(recordsToInsert);
+
+            if (error) throw error;
 
             setStatus('success');
-            setMessage('Report submitted successfully!');
-            // Reset form (optional)
+            setMessage(`Successfully submitted ${recordsToInsert.length} records!`);
             setFile(null);
-            // setTeam(''); // Optional: clear team
-            // setWeek(''); // Optional: clear week
-        } catch (err) {
+
+        } catch (err: any) {
+            console.error('Submission error:', err);
             setStatus('error');
-            setMessage('Failed to submit report. Please try again.');
+            setMessage(err.message || 'Failed to submit report. Please try again.');
         }
     };
 
