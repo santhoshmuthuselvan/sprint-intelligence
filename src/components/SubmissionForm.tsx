@@ -3,8 +3,6 @@ import { Upload, FileText, CheckCircle, AlertCircle, ChevronDown, Check, Plus } 
 import * as xlsx from 'xlsx';
 import { supabase } from '../supabase';
 
-const INITIAL_TEAMS = ['AI Team'];
-
 export const SubmissionForm: React.FC = () => {
     const [team, setTeam] = useState('');
     const [week, setWeek] = useState('');
@@ -12,16 +10,42 @@ export const SubmissionForm: React.FC = () => {
     const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
     const [message, setMessage] = useState('');
 
-    // Creatable Select State
-    const [availableTeams, setAvailableTeams] = useState<string[]>(INITIAL_TEAMS);
-    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const dropdownRef = useRef<HTMLDivElement>(null);
+    // Creatable Select State - Team
+    const [availableTeams, setAvailableTeams] = useState<string[]>([]);
+    const [isTeamDropdownOpen, setIsTeamDropdownOpen] = useState(false);
+    const teamDropdownRef = useRef<HTMLDivElement>(null);
 
-    // Close dropdown when clicking outside
+    // Creatable Select State - Week
+    const [availableWeeks, setAvailableWeeks] = useState<string[]>([]);
+    const [isWeekDropdownOpen, setIsWeekDropdownOpen] = useState(false);
+    const weekDropdownRef = useRef<HTMLDivElement>(null);
+
+    // Fetch existing teams and weeks from Supabase
+    useEffect(() => {
+        const fetchData = async () => {
+            const { data, error } = await supabase
+                .from('sprint_items')
+                .select('team_name, week_name');
+
+            if (!error && data) {
+                const uniqueTeams = Array.from(new Set(data.map((item: any) => item.team_name))).filter(t => t) as string[];
+                const uniqueWeeks = Array.from(new Set(data.map((item: any) => item.week_name))).filter(w => w) as string[];
+
+                setAvailableTeams(uniqueTeams.sort());
+                setAvailableWeeks(uniqueWeeks.sort());
+            }
+        };
+        fetchData();
+    }, []);
+
+    // Close dropdowns when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-                setIsDropdownOpen(false);
+            if (teamDropdownRef.current && !teamDropdownRef.current.contains(event.target as Node)) {
+                setIsTeamDropdownOpen(false);
+            }
+            if (weekDropdownRef.current && !weekDropdownRef.current.contains(event.target as Node)) {
+                setIsWeekDropdownOpen(false);
             }
         };
 
@@ -39,21 +63,24 @@ export const SubmissionForm: React.FC = () => {
 
     const handleTeamSelect = (selectedTeam: string) => {
         setTeam(selectedTeam);
-        setIsDropdownOpen(false);
+        setIsTeamDropdownOpen(false);
     };
 
-    const handleCreateTeam = () => {
-        if (team && !availableTeams.includes(team)) {
-            setAvailableTeams([...availableTeams, team]);
-            setIsDropdownOpen(false);
-        }
+    const handleWeekSelect = (selectedWeek: string) => {
+        setWeek(selectedWeek);
+        setIsWeekDropdownOpen(false);
     };
 
     const filteredTeams = availableTeams.filter(t =>
         t.toLowerCase().includes(team.toLowerCase())
     );
 
-    const showCreateOption = team && !availableTeams.some(t => t.toLowerCase() === team.toLowerCase());
+    const filteredWeeks = availableWeeks.filter(w =>
+        w.toLowerCase().includes(week.toLowerCase())
+    );
+
+    const showCreateTeamOption = team && !availableTeams.some(t => t.toLowerCase() === team.toLowerCase());
+    const showCreateWeekOption = week && !availableWeeks.some(w => w.toLowerCase() === week.toLowerCase());
 
     const parseDate = (value: any) => {
         if (!value) return null;
@@ -139,6 +166,10 @@ export const SubmissionForm: React.FC = () => {
             setMessage(`Successfully submitted ${recordsToInsert.length} records!`);
             setFile(null);
 
+            // Refresh lists (optimistic or re-fetch)
+            if (!availableTeams.includes(team)) setAvailableTeams([...availableTeams, team].sort());
+            if (!availableWeeks.includes(week)) setAvailableWeeks([...availableWeeks, week].sort());
+
         } catch (err: any) {
             console.error('Submission error:', err);
             setStatus('error');
@@ -170,7 +201,8 @@ export const SubmissionForm: React.FC = () => {
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="relative" ref={dropdownRef}>
+                        {/* Team Dropdown */}
+                        <div className="relative" ref={teamDropdownRef}>
                             <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Team Name</label>
                             <div className="relative">
                                 <input
@@ -179,17 +211,17 @@ export const SubmissionForm: React.FC = () => {
                                     value={team}
                                     onChange={(e) => {
                                         setTeam(e.target.value);
-                                        setIsDropdownOpen(true);
+                                        setIsTeamDropdownOpen(true);
                                     }}
-                                    onFocus={() => setIsDropdownOpen(true)}
+                                    onFocus={() => setIsTeamDropdownOpen(true)}
                                     className="w-full p-2.5 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow pr-10"
                                 />
                                 <ChevronDown
-                                    className={`absolute right-3 top-2.5 w-5 h-5 text-zinc-400 pointer-events-none transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}
+                                    className={`absolute right-3 top-2.5 w-5 h-5 text-zinc-400 pointer-events-none transition-transform ${isTeamDropdownOpen ? 'rotate-180' : ''}`}
                                 />
                             </div>
 
-                            {isDropdownOpen && (
+                            {isTeamDropdownOpen && (
                                 <div className="absolute z-10 w-full mt-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl max-h-60 overflow-auto">
                                     {filteredTeams.length > 0 ? (
                                         filteredTeams.map((t) => (
@@ -204,17 +236,17 @@ export const SubmissionForm: React.FC = () => {
                                             </button>
                                         ))
                                     ) : (
-                                        !showCreateOption && (
+                                        !showCreateTeamOption && (
                                             <div className="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
                                                 No teams found
                                             </div>
                                         )
                                     )}
 
-                                    {showCreateOption && (
+                                    {showCreateTeamOption && (
                                         <button
                                             type="button"
-                                            onClick={handleCreateTeam}
+                                            onClick={() => setIsTeamDropdownOpen(false)}
                                             className="w-full text-left px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600 dark:text-blue-400 flex items-center gap-2 border-t border-zinc-100 dark:border-zinc-700 font-medium"
                                         >
                                             <Plus className="w-4 h-4" />
@@ -225,15 +257,60 @@ export const SubmissionForm: React.FC = () => {
                             )}
                         </div>
 
-                        <div>
+                        {/* Week Dropdown */}
+                        <div className="relative" ref={weekDropdownRef}>
                             <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Week</label>
-                            <input
-                                type="text"
-                                placeholder="e.g. Week-42"
-                                value={week}
-                                onChange={(e) => setWeek(e.target.value)}
-                                className="w-full p-2.5 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow"
-                            />
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder="Select or Create Week"
+                                    value={week}
+                                    onChange={(e) => {
+                                        setWeek(e.target.value);
+                                        setIsWeekDropdownOpen(true);
+                                    }}
+                                    onFocus={() => setIsWeekDropdownOpen(true)}
+                                    className="w-full p-2.5 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow pr-10"
+                                />
+                                <ChevronDown
+                                    className={`absolute right-3 top-2.5 w-5 h-5 text-zinc-400 pointer-events-none transition-transform ${isWeekDropdownOpen ? 'rotate-180' : ''}`}
+                                />
+                            </div>
+
+                            {isWeekDropdownOpen && (
+                                <div className="absolute z-10 w-full mt-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl max-h-60 overflow-auto">
+                                    {filteredWeeks.length > 0 ? (
+                                        filteredWeeks.map((w) => (
+                                            <button
+                                                key={w}
+                                                type="button"
+                                                onClick={() => handleWeekSelect(w)}
+                                                className="w-full text-left px-4 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 text-zinc-900 dark:text-zinc-100 flex items-center justify-between group"
+                                            >
+                                                {w}
+                                                {w === week && <Check className="w-4 h-4 text-blue-500" />}
+                                            </button>
+                                        ))
+                                    ) : (
+                                        !showCreateWeekOption && (
+                                            <div className="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
+                                                No weeks found
+                                            </div>
+                                        )
+                                    )}
+
+                                    {showCreateWeekOption && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsWeekDropdownOpen(false)}
+                                            className="w-full text-left px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600 dark:text-blue-400 flex items-center gap-2 border-t border-zinc-100 dark:border-zinc-700 font-medium"
+                                        >
+                                            <Plus className="w-4 h-4" />
+                                            Create "{week}"
+                                        </button>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
 

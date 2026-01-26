@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, FolderOpen, Zap, Layers, TrendingUp, X, Calendar, User, AlertCircle, CheckCircle } from 'lucide-react';
+import { Loader2, FolderOpen, Zap, Layers, TrendingUp, X, Calendar, User, AlertCircle, CheckCircle, Sparkles, Bot } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import {
     BarChart, Bar, PieChart, Pie, LineChart, Line, AreaChart, Area,
     RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
@@ -9,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FilterBar } from './FilterBar';
 import { DataTable } from './DataTable';
 import { supabase } from '../supabase';
+import { generateSprintSummary } from '../aiService';
 
 interface RawItem {
     id: string;
@@ -61,12 +63,57 @@ export const Dashboard: React.FC = () => {
     const [avgCycleTime, setAvgCycleTime] = useState<number>(0);
     const [velocityTrend, setVelocityTrend] = useState<any[]>([]);
     const [workTypeDist, setWorkTypeDist] = useState<any[]>([]);
+    const [blockerData, setBlockerData] = useState<any[]>([]);
+
+    // AI Summary State
+    const [summary, setSummary] = useState<string>('');
+    const [generatingSummary, setGeneratingSummary] = useState(false);
 
     // Modal State
     const [selectedItem, setSelectedItem] = useState<RawItem | null>(null);
 
+    const handleGenerateSummary = async () => {
+        setGeneratingSummary(true);
+        try {
+            const itemsForAI = filteredItems.map(item => ({
+                id: item.id,
+                item_name: item.name,
+                description: item.description,
+                team_name: item.team,
+                status: item.status,
+                priority: item.priority,
+                estimation_points: item.points,
+                tags: item.tags
+            }));
+
+            const result = await generateSprintSummary(itemsForAI);
+            setSummary(result);
+        } catch (error) {
+            console.error("Summary generation failed", error);
+        } finally {
+            setGeneratingSummary(false);
+        }
+    };
+
     useEffect(() => {
         fetchData();
+
+        // Real-time subscription
+        const channel = supabase
+            .channel('sprint_items_changes')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'sprint_items' },
+                (payload) => {
+                    console.log('Real-time update:', payload);
+                    fetchData();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     useEffect(() => {
@@ -223,6 +270,16 @@ export const Dashboard: React.FC = () => {
             typeCounts[t] = (typeCounts[t] || 0) + 1;
         });
         setWorkTypeDist(Object.entries(typeCounts).map(([name, value]) => ({ name, value })));
+
+        // I. Blocker Frequency (by Team)
+        const blockerCounts: Record<string, number> = {};
+        items.forEach(i => {
+            if (i.tags?.toLowerCase().includes('blocker') || i.status?.toLowerCase().includes('blocker')) {
+                const team = i.team || 'Unknown';
+                blockerCounts[team] = (blockerCounts[team] || 0) + 1;
+            }
+        });
+        setBlockerData(Object.entries(blockerCounts).map(([name, count]) => ({ name, count })));
     };
 
     if (loading || !data) {
@@ -242,10 +299,48 @@ export const Dashboard: React.FC = () => {
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
+                className="flex flex-col md:flex-row md:items-center justify-between gap-4"
             >
-                <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-linear-to-r from-blue-600 to-indigo-600">Analytics Dashboard</h1>
-                <p className="mt-2 text-zinc-600 dark:text-zinc-400">Real-time insights on sprint velocity, focus, and delivery.</p>
+                <div>
+                    <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-linear-to-r from-blue-600 to-indigo-600">Analytics Dashboard</h1>
+                    <p className="mt-2 text-zinc-600 dark:text-zinc-400">Real-time insights on sprint velocity, focus, and delivery.</p>
+                </div>
+                <button
+                    onClick={handleGenerateSummary}
+                    disabled={generatingSummary}
+                    className="flex items-center gap-2 px-4 py-2 bg-linear-to-r from-violet-600 to-fuchsia-600 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 shadow-lg shadow-purple-500/20"
+                >
+                    {generatingSummary ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    {generatingSummary ? 'Generating...' : 'AI Executive Summary'}
+                </button>
             </motion.div>
+
+            {/* AI Summary Result */}
+            <AnimatePresence>
+                {summary && (
+                    <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="bg-linear-to-br from-violet-50 to-fuchsia-50 dark:from-violet-900/20 dark:to-fuchsia-900/20 border border-violet-100 dark:border-violet-800 rounded-2xl p-6 relative overflow-hidden"
+                    >
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 bg-white dark:bg-zinc-800 rounded-xl shadow-sm">
+                                <Bot className="w-6 h-6 text-violet-600" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-2">Executive Summary</h3>
+                                <div className="prose prose-sm dark:prose-invert max-w-none text-zinc-700 dark:text-zinc-300">
+                                    <ReactMarkdown>{summary}</ReactMarkdown>
+                                </div>
+                            </div>
+                            <button onClick={() => setSummary('')} className="text-zinc-400 hover:text-zinc-600">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Filter Bar */}
             <FilterBar
@@ -386,6 +481,21 @@ export const Dashboard: React.FC = () => {
                                     <Tooltip contentStyle={tooltipStyle} />
                                     <Legend layout="horizontal" verticalAlign="bottom" align="center" />
                                 </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </BentoBox>
+
+                    {/* Blocker Frequency */}
+                    <BentoBox title="Blockers by Team" colSpan="lg:col-span-1">
+                        <div className="h-72">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={blockerData}>
+                                    <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                                    <XAxis dataKey="name" stroke="#888" fontSize={12} />
+                                    <YAxis stroke="#888" fontSize={12} allowDecimals={false} />
+                                    <Tooltip contentStyle={tooltipStyle} />
+                                    <Bar dataKey="count" fill="#ef4444" radius={[4, 4, 0, 0]} name="Blockers" />
+                                </BarChart>
                             </ResponsiveContainer>
                         </div>
                     </BentoBox>
