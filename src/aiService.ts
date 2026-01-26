@@ -26,15 +26,16 @@ export const generateSprintSummary = async (items: SprintItem[]): Promise<string
     ).join('\n');
 
     const prompt = `
-    You are an expert Agile Scrum Master. 
-    Analyze the following sprint items and generate a **concise executive summary** (max 2 paragraphs).
+    You are an expert Agile Sprint Coach. 
+    Analyze the following sprint items and generate a comprehensive **Sprint Retrospective & Health Report**.
     
-    Focus on:
-    1. Key achievements (Completed items).
-    2. Risks (Blockers, High Priority items not done).
-    3. Recommendations for the next sprint.
+    Structure your response with these specific sections:
+    1. 🚀 **Key Achievements**: Summarize finished high-impact items.
+    2. 🐢 **Bottleneck Detection**: Identify any stages, teams, or patterns that are slowing down progress (e.g., items stuck in "Review" or specific teams overloaded).
+    3. ⚠️ **Risk Prediction**: Based on the data, predict risks for the remaining time or next sprint (e.g., high-priority items at risk of spillover).
+    4. 💡 **Actionable Recommendations**: Give 2-3 specific tips to improve velocity.
 
-    Format the output in Markdown.
+    Format the output in clean Markdown with emoji headers.
 
     Sprint Items:
     ${itemsText}

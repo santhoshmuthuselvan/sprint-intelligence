@@ -88,40 +88,51 @@ export const SubmissionForm: React.FC = () => {
         return isNaN(date.getTime()) ? null : date.toISOString();
     };
 
+    // Helper to find key case-insensitively and ignoring spaces
+    const findKey = (row: any, target: string) => {
+        const normalizedTarget = target.toLowerCase().replace(/\s+/g, '');
+        return Object.keys(row).find(k => k.toLowerCase().replace(/\s+/g, '') === normalizedTarget);
+    };
+
+    const getValue = (row: any, target: string) => {
+        const key = findKey(row, target);
+        return key ? row[key] : undefined;
+    };
+
     const mapRowToDb = (row: any, teamName: string, weekName: string) => {
         return {
-            item_id: String(row['Item Id'] || ''),
-            item_name: row['Item Name'],
-            description: row['Description'],
-            user_groups: row['User Groups'],
-            created_on: parseDate(row['Created On']),
-            created_by: row['Created by'],
-            sprint: row['Sprint'],
-            completed_on: parseDate(row['Completed On']),
-            tags: row['Tags'],
-            assignee: row['Assignee'],
-            status: row['Status'],
-            epic: row['Epic'],
-            item_type: row['Item Type'],
-            priority: row['Priority'],
-            start_date: parseDate(row['Start Date']),
-            end_date: parseDate(row['End Date']),
-            start_after: parseDate(row['Start After']),
-            duration: row['Duration'],
-            estimation_points: parseFloat(row['Estimation Points']) || 0,
-            release_name: row['Release'],
-            total_workhours: parseFloat(row['Total Workhours']) || 0,
-            work_hours_per_owner: row['Work hours per owner'],
-            work_hours_type: row['Work hours type'],
-            parent_id: String(row['Parent Id'] || ''),
-            sprint_type: row['Sprint Type'],
-            sprint_start_date: parseDate(row['Sprint Start Date']),
-            sprint_end_date: parseDate(row['Sprint End Date']),
-            comments: row['Comments'],
-            created_time: parseDate(row['Created Time']),
-            last_modified: parseDate(row['Last Modified']),
-            blocked_by: row['Blocked by'],
-            blocked_on: parseDate(row['Blocked On']),
+            item_id: String(getValue(row, 'Item Id') || getValue(row, 'ID') || ''),
+            item_name: getValue(row, 'Item Name') || getValue(row, 'Name'),
+            description: getValue(row, 'Description'),
+            user_groups: getValue(row, 'User Groups'),
+            created_on: parseDate(getValue(row, 'Created On')),
+            created_by: getValue(row, 'Created by'),
+            sprint: getValue(row, 'Sprint'),
+            completed_on: parseDate(getValue(row, 'Completed On')),
+            tags: getValue(row, 'Tags'),
+            assignee: getValue(row, 'Assignee') || getValue(row, 'Owner'),
+            status: getValue(row, 'Status'),
+            epic: getValue(row, 'Epic'),
+            item_type: getValue(row, 'Item Type') || getValue(row, 'Type'),
+            priority: getValue(row, 'Priority'),
+            start_date: parseDate(getValue(row, 'Start Date')),
+            end_date: parseDate(getValue(row, 'End Date')),
+            start_after: parseDate(getValue(row, 'Start After')),
+            duration: getValue(row, 'Duration'),
+            estimation_points: parseFloat(getValue(row, 'Estimation Points') || '0'),
+            release_name: getValue(row, 'Release'),
+            total_workhours: parseFloat(getValue(row, 'Total Workhours') || '0'),
+            work_hours_per_owner: getValue(row, 'Work hours per owner'),
+            work_hours_type: getValue(row, 'Work hours type'),
+            parent_id: String(getValue(row, 'Parent Id') || ''),
+            sprint_type: getValue(row, 'Sprint Type'),
+            sprint_start_date: parseDate(getValue(row, 'Sprint Start Date')),
+            sprint_end_date: parseDate(getValue(row, 'Sprint End Date')),
+            comments: getValue(row, 'Comments'),
+            created_time: parseDate(getValue(row, 'Created Time')),
+            last_modified: parseDate(getValue(row, 'Last Modified')),
+            blocked_by: getValue(row, 'Blocked by'),
+            blocked_on: parseDate(getValue(row, 'Blocked On')),
 
             // Metadata
             team_name: teamName,
@@ -145,14 +156,45 @@ export const SubmissionForm: React.FC = () => {
             const workbook = xlsx.read(data);
             const sheetName = workbook.SheetNames[0];
             const sheet = workbook.Sheets[sheetName];
-            const jsonData = xlsx.utils.sheet_to_json<any>(sheet, { defval: '' });
+
+            // 1. Read as array of arrays to find the header row
+            const rawRows = xlsx.utils.sheet_to_json<any[]>(sheet, { header: 1 });
+
+            // 2. Find the row index that contains 'Item Id'
+            let headerRowIndex = -1;
+            for (let i = 0; i < Math.min(rawRows.length, 20); i++) { // Check first 20 rows
+                const row = rawRows[i];
+                if (row && row.some((cell: any) =>
+                    String(cell).toLowerCase().replace(/\s+/g, '') === 'itemid' ||
+                    String(cell).toLowerCase().replace(/\s+/g, '') === 'id'
+                )) {
+                    headerRowIndex = i;
+                    break;
+                }
+            }
+
+            if (headerRowIndex === -1) {
+                throw new Error("Could not find a header row containing 'Item Id' or 'ID'. Please check your file format.");
+            }
+
+            console.log(`Found header row at index ${headerRowIndex}:`, rawRows[headerRowIndex]);
+
+            // 3. Re-parse using the found header row
+            const jsonData = xlsx.utils.sheet_to_json<any>(sheet, { range: headerRowIndex, defval: '' });
+
+            console.log('Parsed Data Sample:', jsonData.slice(0, 2));
 
             const recordsToInsert = jsonData
-                .filter(row => row['Item Id']) // Ensure at least Item Id exists
+                .filter(row => {
+                    const hasId = getValue(row, 'Item Id') || getValue(row, 'ID');
+                    if (!hasId) console.warn('Row skipped (missing ID):', row);
+                    return hasId;
+                })
                 .map(row => mapRowToDb(row, team, week));
 
             if (recordsToInsert.length === 0) {
-                throw new Error('No valid records found in file');
+                const foundKeys = jsonData.length > 0 ? Object.keys(jsonData[0]).join(', ') : 'None';
+                throw new Error(`No valid records found. Found columns: ${foundKeys}`);
             }
 
             // Insert into Supabase
@@ -200,7 +242,7 @@ export const SubmissionForm: React.FC = () => {
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Team Dropdown */}
                         <div className="relative" ref={teamDropdownRef}>
                             <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Team Name</label>

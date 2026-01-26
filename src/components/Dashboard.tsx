@@ -3,12 +3,13 @@ import { Loader2, FolderOpen, Zap, Layers, TrendingUp, X, Calendar, User, AlertC
 import ReactMarkdown from 'react-markdown';
 import {
     BarChart, Bar, PieChart, Pie, LineChart, Line, AreaChart, Area,
-    RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+    RadarChart, Radar, PolarGrid, PolarAngleAxis,
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend
 } from 'recharts';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { FilterBar } from './FilterBar';
 import { DataTable } from './DataTable';
+import { CalendarView } from './CalendarView';
 import { supabase } from '../supabase';
 import { generateSprintSummary } from '../aiService';
 
@@ -39,6 +40,63 @@ interface DashboardData {
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
 
+const containerVariants: Variants = {
+    hidden: { opacity: 0 },
+    visible: {
+        opacity: 1,
+        transition: {
+            staggerChildren: 0.1
+        }
+    }
+};
+
+const itemVariants: Variants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+        opacity: 1,
+        y: 0,
+        transition: {
+            type: "spring",
+            stiffness: 100,
+            damping: 15
+        }
+    }
+};
+
+const GradientDefs = () => (
+    <defs>
+        <linearGradient id="gradTasks" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.8} />
+            <stop offset="100%" stopColor="#6366f1" stopOpacity={0.3} />
+        </linearGradient>
+        <linearGradient id="gradPoints" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+            <stop offset="100%" stopColor="#14b8a6" stopOpacity={0.3} />
+        </linearGradient>
+        <linearGradient id="gradBlockers" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#ef4444" stopOpacity={0.8} />
+            <stop offset="100%" stopColor="#be123c" stopOpacity={0.3} />
+        </linearGradient>
+        <linearGradient id="gradCritical" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#ef4444" stopOpacity={1} />
+            <stop offset="100%" stopColor="#ef4444" stopOpacity={0.6} />
+        </linearGradient>
+        <linearGradient id="gradHigh" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#f97316" stopOpacity={1} />
+            <stop offset="100%" stopColor="#f97316" stopOpacity={0.6} />
+        </linearGradient>
+        <linearGradient id="gradMedium" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#eab308" stopOpacity={1} />
+            <stop offset="100%" stopColor="#eab308" stopOpacity={0.6} />
+        </linearGradient>
+        <linearGradient id="gradLow" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
+            <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.6} />
+        </linearGradient>
+    </defs>
+);
+
+
 export const Dashboard: React.FC = () => {
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -62,12 +120,19 @@ export const Dashboard: React.FC = () => {
     const [priorityMatrix, setPriorityMatrix] = useState<any[]>([]);
     const [avgCycleTime, setAvgCycleTime] = useState<number>(0);
     const [velocityTrend, setVelocityTrend] = useState<any[]>([]);
+    const [velocityTrendPerc, setVelocityTrendPerc] = useState<number | undefined>(undefined);
+    const [taskTrendPerc, setTaskTrendPerc] = useState<number | undefined>(undefined);
     const [workTypeDist, setWorkTypeDist] = useState<any[]>([]);
     const [blockerData, setBlockerData] = useState<any[]>([]);
+    const [workloadData, setWorkloadData] = useState<any[]>([]);
+    const [taskAgeData, setTaskAgeData] = useState<any[]>([]);
 
     // AI Summary State
     const [summary, setSummary] = useState<string>('');
     const [generatingSummary, setGeneratingSummary] = useState(false);
+
+    // View State
+    const [activeView, setActiveView] = useState<'grid' | 'calendar'>('grid');
 
     // Modal State
     const [selectedItem, setSelectedItem] = useState<RawItem | null>(null);
@@ -263,6 +328,25 @@ export const Dashboard: React.FC = () => {
         });
         setVelocityTrend(Object.values(trendMap));
 
+        // Calculate Trend Percentage (Points and Tasks)
+        if (weeks.length >= 2) {
+            const lastWeek = weeks[weeks.length - 1];
+            const prevWeek = weeks[weeks.length - 2];
+
+            const lastPoints = trendMap[lastWeek].points;
+            const prevPoints = trendMap[prevWeek].points || 1; // Avoid divide by zero
+            const pPerc = Math.round(((lastPoints - prevPoints) / prevPoints) * 100);
+            setVelocityTrendPerc(pPerc);
+
+            const lastTasks = trendMap[lastWeek].tasks;
+            const prevTasks = trendMap[prevWeek].tasks || 1;
+            const tPerc = Math.round(((lastTasks - prevTasks) / prevTasks) * 100);
+            setTaskTrendPerc(tPerc);
+        } else {
+            setVelocityTrendPerc(undefined);
+            setTaskTrendPerc(undefined);
+        }
+
         // H. Work Type Dist
         const typeCounts: Record<string, number> = {};
         items.forEach(item => {
@@ -280,6 +364,35 @@ export const Dashboard: React.FC = () => {
             }
         });
         setBlockerData(Object.entries(blockerCounts).map(([name, count]) => ({ name, count })));
+
+        // J. Team Workload Balance
+        const userWorkload: Record<string, { name: string, points: number, tasks: number }> = {};
+        items.forEach(item => {
+            if (item.assignee) {
+                const users = item.assignee.split(',').map(u => u.trim()).filter(u => u.length > 0);
+                users.forEach(u => {
+                    if (!userWorkload[u]) userWorkload[u] = { name: u, points: 0, tasks: 0 };
+                    userWorkload[u].points += (item.points || 0);
+                    userWorkload[u].tasks++;
+                });
+            }
+        });
+        setWorkloadData(Object.values(userWorkload).sort((a, b) => b.points - a.points).slice(0, 10));
+
+        // K. Age of In-Progress Tasks
+        const ageBuckets: Record<string, number> = { '1-3 Days': 0, '4-7 Days': 0, '8-14 Days': 0, '15+ Days': 0 };
+        const now = new Date();
+        items.forEach(item => {
+            if (item.status?.toLowerCase().includes('progress') && item.createdOn) {
+                const created = new Date(item.createdOn);
+                const diffDays = Math.ceil(Math.abs(now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
+                if (diffDays <= 3) ageBuckets['1-3 Days']++;
+                else if (diffDays <= 7) ageBuckets['4-7 Days']++;
+                else if (diffDays <= 14) ageBuckets['8-14 Days']++;
+                else ageBuckets['15+ Days']++;
+            }
+        });
+        setTaskAgeData(Object.entries(ageBuckets).map(([name, value]) => ({ name, value })));
     };
 
     if (loading || !data) {
@@ -294,7 +407,12 @@ export const Dashboard: React.FC = () => {
     const totalPoints = filteredItems.reduce((acc, curr) => acc + (curr.points || 0), 0);
 
     return (
-        <div className="space-y-8 pb-10">
+        <motion.div
+            className="space-y-8 pb-10"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+        >
             <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -305,14 +423,30 @@ export const Dashboard: React.FC = () => {
                     <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-linear-to-r from-blue-600 to-indigo-600">Analytics Dashboard</h1>
                     <p className="mt-2 text-zinc-600 dark:text-zinc-400">Real-time insights on sprint velocity, focus, and delivery.</p>
                 </div>
-                <button
-                    onClick={handleGenerateSummary}
-                    disabled={generatingSummary}
-                    className="flex items-center gap-2 px-4 py-2 bg-linear-to-r from-violet-600 to-fuchsia-600 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 shadow-lg shadow-purple-500/20"
-                >
-                    {generatingSummary ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                    {generatingSummary ? 'Generating...' : 'AI Executive Summary'}
-                </button>
+                <div className="flex items-center gap-3">
+                    <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                        <button
+                            onClick={() => setActiveView('grid')}
+                            className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeView === 'grid' ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+                        >
+                            Grid
+                        </button>
+                        <button
+                            onClick={() => setActiveView('calendar')}
+                            className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeView === 'calendar' ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+                        >
+                            Calendar
+                        </button>
+                    </div>
+                    <button
+                        onClick={handleGenerateSummary}
+                        disabled={generatingSummary}
+                        className="flex items-center gap-2 px-4 py-2 bg-linear-to-r from-violet-600 to-fuchsia-600 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 shadow-lg shadow-purple-500/20"
+                    >
+                        {generatingSummary ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        {generatingSummary ? 'Generating...' : 'AI Executive Summary'}
+                    </button>
+                </div>
             </motion.div>
 
             {/* AI Summary Result */}
@@ -352,173 +486,215 @@ export const Dashboard: React.FC = () => {
             />
 
             {/* KPIS */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <KPICard title="Total Tasks" value={totalTasks} icon={FolderOpen} color="blue" />
-                <KPICard title="Story Points" value={totalPoints} icon={Zap} color="yellow" />
-                <KPICard title="Active Sprints" value={new Set(filteredItems.map(i => i.sprint)).size} icon={Layers} color="purple" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <KPICard title="Total Tasks" value={totalTasks} icon={FolderOpen} color="blue" trend={taskTrendPerc} />
+                <KPICard title="Story Points" value={totalPoints} icon={Zap} color="yellow" trend={velocityTrendPerc} />
+                <KPICard title="Completed Sprints" value={new Set(filteredItems.map(i => i.sprint)).size} icon={Layers} color="purple" />
                 <KPICard title="Avg Cycle Time" value={`${avgCycleTime} days`} icon={TrendingUp} color="orange" />
             </div>
 
-            {groupBy !== 'none' ? (
-                // Grouped View
-                <BentoBox title={`Grouped by ${groupBy}`} colSpan="col-span-full">
-                    <div className="h-96">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={groupedData} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
-                                <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                                <XAxis dataKey="name" stroke="#888888" fontSize={12} angle={-45} textAnchor="end" interval={0} height={70} />
-                                <YAxis stroke="#888888" fontSize={12} />
-                                <Tooltip contentStyle={tooltipStyle} />
-                                <Legend verticalAlign="top" />
-                                <Bar dataKey="tasks" fill="#3b82f6" name="Tasks" radius={[4, 4, 0, 0]} />
-                                <Bar dataKey="points" fill="#10b981" name="Points" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </BentoBox>
+            {activeView === 'grid' ? (
+                <>
+                    {groupBy !== 'none' ? (
+                        // Grouped View
+                        <BentoBox title={`Grouped by ${groupBy}`} colSpan="col-span-full">
+                            <div className="h-96">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={groupedData} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
+                                        <GradientDefs />
+                                        <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                                        <XAxis dataKey="name" stroke="#888888" fontSize={12} angle={-45} textAnchor="end" interval={0} height={70} />
+                                        <YAxis stroke="#888888" fontSize={12} />
+                                        <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} cursor={{ fill: 'transparent' }} />
+                                        <Legend verticalAlign="top" />
+                                        <Bar dataKey="tasks" fill="url(#gradTasks)" name="Tasks" radius={[4, 4, 0, 0]} />
+                                        <Bar dataKey="points" fill="url(#gradPoints)" name="Points" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </BentoBox>
+                    ) : (
+                        // Bento Grid Layout
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Main Analytics Row */}
+                            <BentoBox title="Workflow Status Evolution" colSpan="lg:col-span-2">
+                                <div className="h-80">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart data={statusAreaChartData}>
+                                            <defs>
+                                                <linearGradient id="colorDone" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
+                                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                                </linearGradient>
+                                                <linearGradient id="colorInProgress" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
+                                                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                                </linearGradient>
+                                                <linearGradient id="colorToDo" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8} />
+                                                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                                                </linearGradient>
+                                            </defs>
+                                            <XAxis dataKey="name" stroke="#888888" fontSize={12} />
+                                            <YAxis stroke="#888888" fontSize={12} />
+                                            <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                                            <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} />
+                                            <Legend />
+                                            <Area type="monotone" dataKey="Done" stackId="1" stroke="#10b981" fill="url(#colorDone)" />
+                                            <Area type="monotone" dataKey="In Progress" stackId="1" stroke="#3b82f6" fill="url(#colorInProgress)" />
+                                            <Area type="monotone" dataKey="To Do" stackId="1" stroke="#f59e0b" fill="url(#colorToDo)" />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </BentoBox>
+
+                            <BentoBox title="Velocity Trend" colSpan="lg:col-span-1">
+                                <div className="h-80">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={velocityTrend}>
+                                            <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                                            <XAxis dataKey="name" stroke="#888888" fontSize={10} angle={-30} textAnchor="end" height={50} />
+                                            <YAxis yAxisId="left" stroke="#888888" fontSize={12} />
+                                            <YAxis yAxisId="right" orientation="right" stroke="#888888" fontSize={12} />
+                                            <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} />
+                                            <Line yAxisId="left" type="monotone" dataKey="tasks" stroke="#3b82f6" strokeWidth={2} name="Tasks" dot={false} />
+                                            <Line yAxisId="right" type="monotone" dataKey="points" stroke="#10b981" strokeWidth={2} name="Points" dot={false} />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </BentoBox>
+
+                            {/* Workload & Capacity Row */}
+                            <BentoBox title="Team Workload Balance" colSpan="lg:col-span-2">
+                                <div className="h-80">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={workloadData} layout="vertical" margin={{ left: 40 }}>
+                                            <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                                            <XAxis type="number" stroke="#888888" fontSize={12} />
+                                            <YAxis dataKey="name" type="category" stroke="#888888" fontSize={11} width={80} />
+                                            <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} />
+                                            <Bar dataKey="points" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Story Points" />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </BentoBox>
+
+                            <BentoBox title="In-Progress Task Aging" colSpan="lg:col-span-1">
+                                <div className="h-80">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={taskAgeData}>
+                                            <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                                            <XAxis dataKey="name" stroke="#888888" fontSize={11} />
+                                            <YAxis stroke="#888888" fontSize={12} />
+                                            <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} />
+                                            <Bar dataKey="value" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Count" />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </BentoBox>
+
+                            {/* Breakdown Row */}
+                            <BentoBox title="Work Type Dist." colSpan="lg:col-span-1">
+                                <div className="h-72">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie data={workTypeDist} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                                                {workTypeDist.map((_: any, index: number) => (
+                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} />
+                                            <Legend verticalAlign="bottom" align="center" iconType="circle" wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }} />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </BentoBox>
+
+                            <BentoBox title="Effort by Project" colSpan="lg:col-span-1">
+                                <div className="h-72">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie data={epicData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="value">
+                                                {epicData.map((_: any, index: number) => (
+                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} />
+                                            <Legend
+                                                verticalAlign="bottom"
+                                                align="center"
+                                                iconType="circle"
+                                                wrapperStyle={{
+                                                    fontSize: '9px',
+                                                    paddingTop: '20px',
+                                                    lineHeight: '1.2'
+                                                }}
+                                            />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </BentoBox>
+
+                            <BentoBox title="Sprint Focus Radar" colSpan="lg:col-span-1">
+                                <div className="h-72 w-full flex justify-center">
+                                    {tagRadarData.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <RadarChart cx="50%" cy="50%" outerRadius="65%" data={tagRadarData}>
+                                                <PolarGrid stroke="#888888" opacity={0.2} />
+                                                <PolarAngleAxis dataKey="subject" tick={{ fill: '#888888', fontSize: 10 }} />
+                                                <Radar name="Points" dataKey="fullMark" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.5} />
+                                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} />
+                                            </RadarChart>
+                                        </ResponsiveContainer>
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center text-zinc-500 gap-2">
+                                            <Sparkles className="w-8 h-8 opacity-20" />
+                                            <p className="text-xs italic text-center px-6">Add tags for focus radar</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </BentoBox>
+
+                            <BentoBox title="Resource Risk Matrix" colSpan="col-span-full">
+                                <div className="h-80">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={priorityMatrix} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                                            <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                                            <XAxis dataKey="name" stroke="#888888" fontSize={11} interval={0} tickFormatter={(val) => val.split(' ')[0]} />
+                                            <YAxis stroke="#888888" fontSize={12} />
+                                            <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} />
+                                            <Legend verticalAlign="top" />
+                                            <Bar dataKey="Critical" stackId="a" fill="#ef4444" radius={[0, 0, 0, 0]} />
+                                            <Bar dataKey="High" stackId="a" fill="#f97316" radius={[0, 0, 0, 0]} />
+                                            <Bar dataKey="Medium" stackId="a" fill="#eab308" radius={[0, 0, 0, 0]} />
+                                            <Bar dataKey="Low" stackId="a" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </BentoBox>
+
+                            {/* Blocker Frequency - Only show if data exists */}
+                            {blockerData.length > 0 && (
+                                <BentoBox title="Blockers by Team" colSpan="lg:col-span-1">
+                                    <div className="h-72">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={blockerData}>
+                                                <GradientDefs />
+                                                <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                                                <XAxis dataKey="name" stroke="#888" fontSize={12} />
+                                                <YAxis stroke="#888" fontSize={12} allowDecimals={false} />
+                                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} cursor={{ fill: 'transparent' }} />
+                                                <Bar dataKey="count" fill="url(#gradBlockers)" radius={[4, 4, 0, 0]} name="Blockers" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </BentoBox>
+                            )}
+                        </div>
+                    )}
+                </>
             ) : (
-                // Bento Grid Layout
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Status Evolution (Stacked Area) */}
-                    <BentoBox title="Workflow Status Evolution" colSpan="lg:col-span-2">
-                        <div className="h-80">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={statusAreaChartData}>
-                                    <defs>
-                                        <linearGradient id="colorStatus" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8} />
-                                            <stop offset="95%" stopColor="#8884d8" stopOpacity={0} />
-                                        </linearGradient>
-                                    </defs>
-                                    <XAxis dataKey="name" stroke="#888888" fontSize={12} />
-                                    <YAxis stroke="#888888" fontSize={12} />
-                                    <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                                    <Tooltip contentStyle={tooltipStyle} />
-                                    <Legend />
-                                    <Area type="monotone" dataKey="Done" stackId="1" stroke="#10b981" fill="#10b981" />
-                                    <Area type="monotone" dataKey="In Progress" stackId="1" stroke="#3b82f6" fill="#3b82f6" />
-                                    <Area type="monotone" dataKey="To Do" stackId="1" stroke="#f59e0b" fill="#f59e0b" />
-                                </AreaChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </BentoBox>
-
-                    {/* Sprint Focus (Radar) */}
-                    <BentoBox title="Sprint Focus Top 5 (Tags)" colSpan="lg:col-span-1">
-                        <div className="h-80 w-full flex justify-center">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={tagRadarData}>
-                                    <PolarGrid opacity={0.2} />
-                                    <PolarAngleAxis dataKey="subject" fontSize={11} stroke="#888888" />
-                                    <PolarRadiusAxis angle={30} domain={[0, 'auto']} opacity={0} />
-                                    <Radar name="Points" dataKey="fullMark" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.5} />
-                                    <Tooltip contentStyle={tooltipStyle} />
-                                </RadarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </BentoBox>
-
-                    {/* Velocity Trend */}
-                    <BentoBox title="Velocity Trend" colSpan="lg:col-span-2">
-                        <div className="h-72">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={velocityTrend}>
-                                    <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                                    <XAxis dataKey="name" stroke="#888888" fontSize={12} />
-                                    <YAxis yAxisId="left" stroke="#888888" fontSize={12} />
-                                    <YAxis yAxisId="right" orientation="right" stroke="#888888" fontSize={12} />
-                                    <Tooltip contentStyle={tooltipStyle} />
-                                    <Legend />
-                                    <Line yAxisId="left" type="monotone" dataKey="tasks" stroke="#3b82f6" strokeWidth={3} activeDot={{ r: 8 }} name="Tasks" />
-                                    <Line yAxisId="right" type="monotone" dataKey="points" stroke="#10b981" strokeWidth={3} name="Points" />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </BentoBox>
-
-                    {/* Task Distribution */}
-                    <BentoBox title="Work Type" colSpan="lg:col-span-1">
-                        <div className="h-72">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={workTypeDist}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={60}
-                                        outerRadius={80}
-                                        paddingAngle={5}
-                                        dataKey="value"
-                                    >
-                                        {workTypeDist.map((_: any, index: number) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip contentStyle={tooltipStyle} />
-                                    <Legend layout="horizontal" verticalAlign="bottom" align="center" />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </BentoBox>
-
-                    {/* Epic Distribution */}
-                    <BentoBox title="Effort by Project" colSpan="lg:col-span-1">
-                        <div className="h-72">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={epicData}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={40}
-                                        outerRadius={80}
-                                        dataKey="value"
-                                    >
-                                        {epicData.map((_: any, index: number) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip contentStyle={tooltipStyle} />
-                                    <Legend layout="horizontal" verticalAlign="bottom" align="center" />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </BentoBox>
-
-                    {/* Blocker Frequency */}
-                    <BentoBox title="Blockers by Team" colSpan="lg:col-span-1">
-                        <div className="h-72">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={blockerData}>
-                                    <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                                    <XAxis dataKey="name" stroke="#888" fontSize={12} />
-                                    <YAxis stroke="#888" fontSize={12} allowDecimals={false} />
-                                    <Tooltip contentStyle={tooltipStyle} />
-                                    <Bar dataKey="count" fill="#ef4444" radius={[4, 4, 0, 0]} name="Blockers" />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </BentoBox>
-
-                    {/* Resource Priority Matrix */}
-                    <BentoBox title="Resource Risk Matrix (Top 10)" colSpan="lg:col-span-2">
-                        <div className="h-72">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={priorityMatrix} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
-                                    <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                                    <XAxis dataKey="name" stroke="#888888" fontSize={12} />
-                                    <YAxis stroke="#888888" fontSize={12} />
-                                    <Tooltip contentStyle={tooltipStyle} />
-                                    <Legend />
-                                    <Bar dataKey="Critical" stackId="a" fill="#ef4444" radius={[0, 0, 4, 4]} />
-                                    <Bar dataKey="High" stackId="a" fill="#f97316" />
-                                    <Bar dataKey="Medium" stackId="a" fill="#eab308" />
-                                    <Bar dataKey="Low" stackId="a" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </BentoBox>
-                </div>
+                <CalendarView items={filteredItems} onRowClick={setSelectedItem} />
             )}
 
             {/* Data Table */}
@@ -529,19 +705,19 @@ export const Dashboard: React.FC = () => {
             {/* Detail Modal */}
             <AnimatePresence>
                 {selectedItem && (
-                    <motion.div
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={() => setSelectedItem(null)}
-                    >
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                         <motion.div
-                            className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden"
+                            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setSelectedItem(null)}
+                        />
+                        <motion.div
+                            className="relative bg-white dark:bg-zinc-900 rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden"
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
-                            onClick={(e) => e.stopPropagation()}
                         >
                             <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-start">
                                 <div>
@@ -581,15 +757,15 @@ export const Dashboard: React.FC = () => {
                                 </div>
 
                                 <div className="flex gap-4 text-sm text-zinc-500">
-                                    <span>Created: {selectedItem.createdOn || 'N/A'}</span>
-                                    <span>Completed: {selectedItem.completedOn || 'N/A'}</span>
+                                    <span>Created: {selectedItem.createdOn ? new Date(selectedItem.createdOn).toLocaleDateString() : 'N/A'}</span>
+                                    <span>Completed: {selectedItem.completedOn ? new Date(selectedItem.completedOn).toLocaleDateString() : 'N/A'}</span>
                                 </div>
                             </div>
                         </motion.div>
-                    </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
-        </div>
+        </motion.div>
     );
 };
 
@@ -597,41 +773,50 @@ export const Dashboard: React.FC = () => {
 
 const BentoBox: React.FC<{ title: string; children: React.ReactNode; colSpan?: string }> = ({ title, children, colSpan = "col-span-1" }) => (
     <motion.div
-        className={`bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md p-6 rounded-2xl shadow-sm border border-zinc-200/50 dark:border-zinc-700/50 ${colSpan}`}
-        initial={{ opacity: 0, scale: 0.95 }}
-        whileInView={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4 }}
-        viewport={{ once: true }}
+        className={`bg-white/60 dark:bg-zinc-900/40 backdrop-blur-xl p-6 rounded-3xl shadow-xl border border-white/20 dark:border-white/5 ${colSpan} hover:shadow-2xl transition-all duration-300 ring-1 ring-black/5 dark:ring-white/10 relative hover:z-50`}
+        variants={itemVariants}
     >
-        <h3 className="text-lg font-bold mb-4 text-zinc-900 dark:text-white flex items-center gap-2">
+        <h3 className="text-lg font-bold mb-4 text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
             {title}
         </h3>
         {children}
     </motion.div>
-)
+);
 
-const KPICard: React.FC<{ title: string; value: number | string; icon: React.ElementType; color: string }> = ({ title, value, icon: Icon, color }) => {
-    const colors: Record<string, string> = {
-        blue: 'text-blue-500 bg-blue-100 dark:bg-blue-900/30',
-        yellow: 'text-yellow-500 bg-yellow-100 dark:bg-yellow-900/30',
-        purple: 'text-purple-500 bg-purple-100 dark:bg-purple-900/30',
-        orange: 'text-orange-500 bg-orange-100 dark:bg-orange-900/30',
+const KPICard: React.FC<{ title: string; value: number | string; icon: React.ElementType; color: string; trend?: number }> = ({ title, value, icon: Icon, color, trend }) => {
+    const gradients: Record<string, string> = {
+        blue: 'from-blue-500 to-indigo-500',
+        yellow: 'from-amber-400 to-orange-500',
+        purple: 'from-violet-500 to-fuchsia-500',
+        orange: 'from-orange-500 to-red-500',
     };
+
     return (
         <motion.div
-            className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 flex items-center gap-4"
-            whileHover={{ y: -5 }}
+            className="bg-white/60 dark:bg-zinc-900/40 backdrop-blur-xl p-6 rounded-3xl shadow-xl border border-white/20 dark:border-white/5 relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300"
+            variants={itemVariants}
         >
-            <div className={`p-4 rounded-xl ${colors[color] || colors.blue}`}>
-                <Icon className="w-6 h-6" />
-            </div>
-            <div>
-                <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{title}</p>
-                <h3 className="text-3xl font-bold text-zinc-900 dark:text-white">{value}</h3>
+            <div className={`absolute top-0 right-0 w-32 h-32 bg-linear-to-br ${gradients[color]} opacity-10 rounded-full blur-2xl -mr-10 -mt-10 group-hover:opacity-20 transition-opacity`} />
+            <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-4">
+                    <div className={`p-4 rounded-2xl bg-linear-to-br ${gradients[color]} text-white shadow-lg`}>
+                        <Icon className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{title}</p>
+                        <h3 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">{value}</h3>
+                    </div>
+                </div>
+                {trend !== undefined && (
+                    <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${trend >= 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'}`}>
+                        {trend >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingUp className="w-3 h-3 rotate-180" />}
+                        {trend > 0 ? '+' : ''}{trend}%
+                    </div>
+                )}
             </div>
         </motion.div>
-    )
-}
+    );
+};
 
 const DetailItem: React.FC<{ icon: React.ElementType, label: string, value: string | number, color?: string }> = ({ icon: Icon, label, value, color }) => (
     <div className="flex items-center gap-3">
@@ -643,7 +828,7 @@ const DetailItem: React.FC<{ icon: React.ElementType, label: string, value: stri
             <p className={`font-medium ${color || 'text-zinc-900 dark:text-white'}`}>{value || '-'}</p>
         </div>
     </div>
-)
+);
 
 const tooltipStyle = {
     backgroundColor: '#18181b',
