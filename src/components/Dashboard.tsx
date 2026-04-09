@@ -10,7 +10,7 @@ import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { FilterBar } from './FilterBar';
 import { DataTable } from './DataTable';
 import { CalendarView } from './CalendarView';
-import { supabase } from '../supabase';
+import { supabase, fetchAll } from '../supabase';
 import { generateSprintSummary } from '../aiService';
 
 interface RawItem {
@@ -189,11 +189,7 @@ export const Dashboard: React.FC = () => {
 
     const fetchData = async () => {
         try {
-            const { data: items, error } = await supabase
-                .from('sprint_items')
-                .select('*');
-
-            if (error) throw error;
+            const items = await fetchAll(supabase.from('sprint_items').select('*'));
 
             // Map DB columns (snake_case) to Frontend (camelCase)
             const rawItems: RawItem[] = (items || []).map((row: any) => ({

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../supabase';
+import { supabase, fetchAll } from '../supabase';
 import { Trash2, AlertTriangle, Database, CheckCircle2, RefreshCcw, Search, ArrowLeft, Edit3, X, Zap, User, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { SprintItem } from '../types';
@@ -33,11 +33,9 @@ export const ReportManager: React.FC = () => {
     const fetchBatches = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('sprint_items')
-                .select('team_name, week_name, uploaded_at');
-
-            if (error) throw error;
+            const data = await fetchAll(
+                supabase.from('sprint_items').select('team_name, week_name, uploaded_at')
+            );
 
             const batchMap: Record<string, UploadBatch> = {};
             (data || []).forEach(item => {
@@ -67,12 +65,12 @@ export const ReportManager: React.FC = () => {
     const fetchBatchItems = async (batch: UploadBatch) => {
         setLoadingItems(true);
         try {
-            const { data, error } = await supabase
-                .from('sprint_items')
-                .select('*')
-                .match({ team_name: batch.team, week_name: batch.week });
-
-            if (error) throw error;
+            const data = await fetchAll(
+                supabase
+                    .from('sprint_items')
+                    .select('*')
+                    .match({ team_name: batch.team, week_name: batch.week })
+            );
             setBatchItems(data || []);
             setSelectedBatch(batch);
         } catch (err) {

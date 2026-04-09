@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertCircle, ChevronDown, Check, Plus } from 'lucide-react';
 import * as xlsx from 'xlsx';
-import { supabase } from '../supabase';
+import { supabase, fetchAll } from '../supabase';
 
 export const SubmissionForm: React.FC = () => {
     const [team, setTeam] = useState('');
@@ -23,11 +23,11 @@ export const SubmissionForm: React.FC = () => {
     // Fetch existing teams and weeks from Supabase
     useEffect(() => {
         const fetchData = async () => {
-            const { data, error } = await supabase
-                .from('sprint_items')
-                .select('team_name, week_name');
+            const data = await fetchAll(
+                supabase.from('sprint_items').select('team_name, week_name')
+            );
 
-            if (!error && data) {
+            if (data) {
                 const uniqueTeams = Array.from(new Set(data.map((item: any) => item.team_name))).filter(t => t) as string[];
                 const uniqueWeeks = Array.from(new Set(data.map((item: any) => item.week_name))).filter(w => w) as string[];
 

@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { DataTable } from './DataTable';
-import { supabase } from '../supabase';
+import { supabase, fetchAll } from '../supabase';
 import { generateSprintSummary } from '../aiService';
 import { useAuth } from '../context/AuthContext';
 
@@ -65,12 +65,12 @@ export const MemberDashboard: React.FC = () => {
         if (!profile?.full_name) return;
 
         try {
-            const { data: rawData, error } = await supabase
-                .from('sprint_items')
-                .select('*')
-                .ilike('assignee', `%${profile.full_name}%`);
-
-            if (error) throw error;
+            const rawData = await fetchAll(
+                supabase
+                    .from('sprint_items')
+                    .select('*')
+                    .ilike('assignee', `%${profile.full_name}%`)
+            );
 
             const mappedItems: RawItem[] = (rawData || []).map((row: any) => ({
                 id: row.item_id,

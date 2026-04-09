@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../supabase';
+import { supabase, fetchAll } from '../supabase';
 import { motion, type Variants } from 'framer-motion';
 import { Trophy, Medal, Timer, Zap, CheckCircle2, User, TrendingUp } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
@@ -69,11 +69,7 @@ export const Leaderboard: React.FC = () => {
 
     const fetchAllData = async () => {
         try {
-            const { data: items, error } = await supabase
-                .from('sprint_items')
-                .select('*');
-
-            if (error) throw error;
+            const items = await fetchAll(supabase.from('sprint_items').select('*'));
 
             // Map DB columns (snake_case) to Frontend (camelCase) for consistency with FilterBar
             const mappedItems = (items || []).map((row: any) => ({
