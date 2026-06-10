@@ -75,7 +75,7 @@ export const Login: React.FC = () => {
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300
                   group-focus-within:text-indigo-500 transition-colors"/>
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  className="input-base pl-11" placeholder="name@company.com" required/>
+                  className="input-base" style={{ paddingLeft: '2.75rem' }} placeholder="name@company.com" required/>
               </div>
             </div>
 
@@ -87,7 +87,7 @@ export const Login: React.FC = () => {
                   group-focus-within:text-indigo-500 transition-colors"/>
                 <input type={showPassword ? 'text' : 'password'} value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="input-base pl-11 pr-12" placeholder="••••••••" required/>
+                  className="input-base" style={{ paddingLeft: '2.75rem', paddingRight: '3rem' }} placeholder="••••••••" required/>
                 <button type="button" onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300
                     hover:text-slate-500 transition-colors focus:outline-none">

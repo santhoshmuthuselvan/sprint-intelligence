@@ -28,10 +28,27 @@ const itemVariants: Variants = {
   visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 120, damping: 18 } }
 };
 
-const tooltipStyle = {
-  backgroundColor: '#ffffff', border: '1px solid #e2e8f0',
-  borderRadius: '10px', color: '#0f172a', fontSize: '12px',
-  boxShadow: '0 8px 24px rgba(0,0,0,0.08)'
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-lg text-xs font-medium text-slate-800">
+        {label && <p className="font-bold text-slate-900 mb-1.5">{label}</p>}
+        <div className="space-y-1.5 min-w-[140px]">
+          {payload.map((entry: any, index: number) => {
+            const color = entry.stroke && entry.stroke !== 'none' ? entry.stroke : entry.fill || entry.color || '#6366f1';
+            return (
+              <div key={index} className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                <span className="text-slate-500 font-medium">{entry.name}</span>
+                <span className="font-bold text-slate-800 ml-auto">{entry.value}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+  return null;
 };
 
 export const MemberDashboard: React.FC = () => {
@@ -173,7 +190,7 @@ export const MemberDashboard: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
                 <XAxis dataKey="name" fontSize={11} stroke="#94a3b8" tickLine={false}/>
                 <YAxis fontSize={11} stroke="#94a3b8" tickLine={false}/>
-                <Tooltip contentStyle={tooltipStyle}/>
+                <Tooltip content={<CustomTooltip/>}/>
                 <Area type="monotone" dataKey="points" stroke="#10b981" strokeWidth={2}
                   fillOpacity={1} fill="url(#colMyVel)" name="Story Points"/>
               </AreaChart>
@@ -189,7 +206,7 @@ export const MemberDashboard: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false}/>
                 <XAxis type="number" hide/>
                 <YAxis dataKey="name" type="category" fontSize={11} stroke="#94a3b8" width={80} tickLine={false}/>
-                <Tooltip contentStyle={tooltipStyle}/>
+                <Tooltip content={<CustomTooltip/>}/>
                 <Bar dataKey="value" radius={[0,4,4,0]} name="Tasks">
                   {statusDist.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
                 </Bar>

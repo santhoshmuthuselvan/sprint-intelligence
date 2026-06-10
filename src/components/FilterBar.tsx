@@ -111,7 +111,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                   if (isGroupBy) setGroupBy?.(e.target.value);
                   else handleChange(key, e.target.value);
                 }}
-                className="input-base pr-8 truncate text-sm"
+                className="input-base truncate text-sm"
+                style={{ paddingRight: '2rem' }}
               >
                 {isGroupBy ? (
                   <>
