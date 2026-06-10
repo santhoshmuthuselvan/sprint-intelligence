@@ -1,126 +1,120 @@
 import React, { useState, useMemo } from 'react';
-import clsx from 'clsx';
-import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { ChevronUp, ChevronDown, ChevronsUpDown, Inbox } from 'lucide-react';
 
 interface DataTableProps {
-    items: any[];
-    onRowClick?: (item: any) => void;
+  items: any[];
+  onRowClick?: (item: any) => void;
 }
-
-type SortDirection = 'asc' | 'desc' | null;
-
-interface SortConfig {
-    key: string;
-    direction: SortDirection;
-}
+type SortDir = 'asc' | 'desc' | null;
 
 export const DataTable: React.FC<DataTableProps> = ({ items, onRowClick }) => {
-    const [sortConfig, setSortConfig] = useState<SortConfig>({ key: '', direction: null });
+  const [sort, setSort] = useState<{ key: string; dir: SortDir }>({ key: '', dir: null });
 
-    const sortedItems = useMemo(() => {
-        if (!sortConfig.key || !sortConfig.direction) return items;
+  const sorted = useMemo(() => {
+    if (!sort.key || !sort.dir) return items;
+    return [...items].sort((a, b) => {
+      const av = a[sort.key], bv = b[sort.key];
+      const an = Number(av), bn = Number(bv);
+      if (!isNaN(an) && !isNaN(bn)) return sort.dir === 'asc' ? an - bn : bn - an;
+      const as = String(av || '').toLowerCase(), bs = String(bv || '').toLowerCase();
+      return sort.dir === 'asc' ? as.localeCompare(bs) : bs.localeCompare(as);
+    });
+  }, [items, sort]);
 
-        return [...items].sort((a, b) => {
-            const aValue = a[sortConfig.key];
-            const bValue = b[sortConfig.key];
+  const toggleSort = (key: string) => {
+    setSort(prev => ({
+      key,
+      dir: prev.key === key
+        ? prev.dir === 'asc' ? 'desc' : prev.dir === 'desc' ? null : 'asc'
+        : 'asc'
+    }));
+  };
 
-            // Handle numeric values
-            const aNum = Number(aValue);
-            const bNum = Number(bValue);
+  const SortIcon = ({ k }: { k: string }) => {
+    if (sort.key !== k)           return <ChevronsUpDown className="w-3.5 h-3.5 text-slate-300" />;
+    if (sort.dir === 'asc')  return <ChevronUp    className="w-3.5 h-3.5 text-indigo-500" />;
+    if (sort.dir === 'desc') return <ChevronDown   className="w-3.5 h-3.5 text-indigo-500" />;
+    return <ChevronsUpDown className="w-3.5 h-3.5 text-slate-300" />;
+  };
 
-            if (!isNaN(aNum) && !isNaN(bNum)) {
-                return sortConfig.direction === 'asc' ? aNum - bNum : bNum - aNum;
-            }
+  if (items.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-16 text-slate-300">
+      <Inbox className="w-12 h-12 mb-3 opacity-40" />
+      <p className="text-sm font-semibold text-slate-400">No items match the current filters</p>
+    </div>
+  );
 
-            // Handle string values
-            const aString = String(aValue || '').toLowerCase();
-            const bString = String(bValue || '').toLowerCase();
+  const headers = [
+    { key: 'id',       label: 'ID' },
+    { key: 'type',     label: 'Type' },
+    { key: 'name',     label: 'Summary' },
+    { key: 'assignee', label: 'Assignee' },
+    { key: 'priority', label: 'Priority' },
+    { key: 'status',   label: 'Status' },
+    { key: 'points',   label: 'Pts' },
+  ];
 
-            if (aString < bString) return sortConfig.direction === 'asc' ? -1 : 1;
-            if (aString > bString) return sortConfig.direction === 'asc' ? 1 : -1;
-            return 0;
-        });
-    }, [items, sortConfig]);
+  const priorityBadge = (p: string) => {
+    if (!p) return 'badge badge-low';
+    const l = p.toLowerCase();
+    if (l === 'critical') return 'badge badge-critical';
+    if (l === 'high')     return 'badge badge-high';
+    if (l === 'medium')   return 'badge badge-medium';
+    return 'badge badge-low';
+  };
 
-    const handleSort = (key: string) => {
-        let direction: SortDirection = 'asc';
-        if (sortConfig.key === key && sortConfig.direction === 'asc') {
-            direction = 'desc';
-        } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
-            direction = null; // Reset to default order
-        }
-        setSortConfig({ key, direction });
-    };
+  const statusBadge = (s: string) => {
+    const l = (s || '').toLowerCase();
+    if (l.includes('done') || l.includes('complete')) return 'badge badge-done';
+    if (l.includes('progress'))                        return 'badge badge-progress';
+    return 'badge badge-medium';
+  };
 
-    const SortIcon = ({ columnKey }: { columnKey: string }) => {
-        if (sortConfig.key !== columnKey) return <ChevronsUpDown className="w-4 h-4 ml-1 text-zinc-400 opacity-50" />;
-        if (sortConfig.direction === 'asc') return <ChevronUp className="w-4 h-4 ml-1 text-blue-500" />;
-        return <ChevronDown className="w-4 h-4 ml-1 text-blue-500" />;
-    };
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 flex flex-col" style={{ height: 480 }}>
+      <div className="overflow-auto flex-1">
+        <table className="min-w-full">
+          {/* Sticky header */}
+          <thead className="table-header sticky top-0 z-10">
+            <tr>
+              {headers.map(h => (
+                <th key={h.key} onClick={() => toggleSort(h.key)}
+                  className="px-4 py-3 text-left whitespace-nowrap cursor-pointer select-none
+                    hover:bg-slate-100 transition-colors">
+                  <div className="flex items-center gap-1">
+                    {h.label}
+                    <SortIcon k={h.key} />
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
 
-    if (items.length === 0) return <div className="text-center py-8 text-zinc-500">No items match the filters.</div>;
-
-    const headers = [
-        { key: 'id', label: 'ID' },
-        { key: 'type', label: 'Type' },
-        { key: 'name', label: 'Summary' },
-        { key: 'assignee', label: 'Assignee' },
-        { key: 'priority', label: 'Priority' },
-        { key: 'status', label: 'Status' },
-        { key: 'points', label: 'Points' },
-    ];
-
-    return (
-        <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700 flex flex-col h-[500px]">
-            {/* Header is separate or sticky to remain viewable while scrolling */}
-            <div className="overflow-auto flex-1">
-                <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-700 relative">
-                    <thead className="bg-zinc-50 dark:bg-zinc-800 sticky top-0 z-10 shadow-sm">
-                        <tr>
-                            {headers.map((header) => (
-                                <th
-                                    key={header.key}
-                                    onClick={() => handleSort(header.key)}
-                                    className="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors select-none group"
-                                >
-                                    <div className="flex items-center">
-                                        {header.label}
-                                        <SortIcon columnKey={header.key} />
-                                    </div>
-                                </th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white dark:bg-zinc-900 divide-y divide-zinc-200 dark:divide-zinc-700">
-                        {sortedItems.map((item, idx) => (
-                            <tr
-                                key={`${item.id}-${idx}`}
-                                onClick={() => onRowClick && onRowClick(item)}
-                                className={`transition-colors ${onRowClick ? 'cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50'}`}
-                            >
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 dark:text-blue-400">{item.id}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-500 dark:text-zinc-400">{item.type}</td>
-                                <td className="px-6 py-4 text-sm text-zinc-900 dark:text-zinc-100 max-w-xs truncate" title={item.name}>
-                                    {item.name}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-700 dark:text-zinc-300">{item.assignee}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                    <span className={clsx(
-                                        "px-2 inline-flex text-xs leading-5 font-semibold rounded-full",
-                                        item.priority === 'High' || item.priority === 'Critical' ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" :
-                                            item.priority === 'Medium' ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300" :
-                                                "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
-                                    )}>
-                                        {item.priority}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-500 dark:text-zinc-400">{item.status}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-900 dark:text-zinc-100">{item.points}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
+          <tbody className="bg-white divide-y divide-slate-50">
+            {sorted.map((item, idx) => (
+              <tr key={`${item.id}-${idx}`}
+                onClick={() => onRowClick?.(item)}
+                className={`table-row ${onRowClick ? 'cursor-pointer' : ''}`}>
+                <td className="px-4 py-3 whitespace-nowrap text-xs font-bold text-indigo-600">{item.id}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <span className="text-xs text-slate-500 font-medium">{item.type}</span>
+                </td>
+                <td className="px-4 py-3 max-w-xs truncate text-sm text-slate-700 font-medium" title={item.name}>
+                  {item.name}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-600">{item.assignee}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <span className={priorityBadge(item.priority)}>{item.priority}</span>
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <span className={statusBadge(item.status)}>{item.status}</span>
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-slate-700">{item.points}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 };

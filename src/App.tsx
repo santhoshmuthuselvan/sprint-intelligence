@@ -15,13 +15,12 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 
 const AppContent = () => {
   const { user, profile } = useAuth();
-
   const defaultPath = profile?.role === 'member' ? '/member-dashboard' : '/dashboard';
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans flex">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex overflow-x-hidden">
       {user && <Navigation />}
-      <main className={`flex-1 ${user ? 'md:ml-36' : ''} px-4 sm:px-6 lg:px-8 py-8 pb-32 md:pb-8`}>
+      <main className={`flex-1 min-w-0 overflow-x-hidden ${user ? 'md:ml-36' : ''} px-4 sm:px-6 lg:px-8 py-8 pb-32 md:pb-8`}>
         <Routes>
           <Route path="/login" element={!user ? <Login /> : <Navigate to={defaultPath} replace />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -50,7 +49,6 @@ const AppContent = () => {
               <Leaderboard />
             </ProtectedRoute>
           } />
-
 
           <Route path="/profile" element={
             <ProtectedRoute allowedRoles={['Owner', 'manager', 'member']}>
